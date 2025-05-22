@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Bash / shell artifacts
+*.swp
+*.swo
+
+# Runtime data
+/data/*.json
+/data/*.log
+
+# Other
+.env
