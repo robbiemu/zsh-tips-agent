@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Smart tip generator for under‑used CLI tools with a single CodeAgent."""
 from __future__ import annotations
-import json, os, shutil, subprocess, sys, textwrap
+import json, os, shutil, subprocess, sys, textwrap, time
 from pathlib import Path
 from typing import Optional
 from smolagents import CodeAgent, LiteLLMModel, Tool
-
 
 # ---------------- Config ----------------
 
@@ -30,8 +29,10 @@ def load_model_cfg() -> tuple[str, dict, int]:
             pass
     return model_id, params, tokens
 
+
 def truncate(txt: str, limit: int, ratio: float = 3.5) -> str:
     return txt[-int(limit * ratio):]
+
 
 def looks_binary(p: str, n: int = 1024) -> bool:
     with open(p, "rb") as f:
@@ -94,35 +95,24 @@ class HelpTool(_BaseTool):
 class ProbeTool(_BaseTool):
     name = "probe"
     description = "Show the location and type of a command"
-
     def forward(self, name: str) -> Optional[str]:
-        # Locate the command using shutil.which
         path = shutil.which(name)
         if not path:
             return f"Command '{name}' not found in PATH."
-
-        # Get the absolute path
         abs_path = os.path.realpath(path)
         directory = os.path.dirname(abs_path)
-
-        # Determine the file type using the 'file' command
         try:
             file_output = subprocess.check_output(['file', '--brief', '--mime', abs_path], text=True).strip()
         except subprocess.CalledProcessError:
             file_output = "Unknown file type"
-
-        # Determine if the file is binary or text
         is_binary = 'charset=binary' in file_output
-
-        # Format the output
-        output = (
+        return (
             f"Command: {name}\n"
             f"Full Path: {abs_path}\n"
             f"Directory: {directory}\n"
             f"File Type: {file_output}\n"
             f"Is Binary: {'Yes' if is_binary else 'No'}"
         )
-        return output
 
 
 class ScriptTool(_BaseTool):
@@ -139,22 +129,13 @@ class ScriptTool(_BaseTool):
 MODEL_ID, MODEL_PARAMS, TOKEN_LIMIT = load_model_cfg()
 LLM = LiteLLMModel(model_id=f"ollama/{MODEL_ID}", **MODEL_PARAMS)
 
-# ------------- MultiStepAgent -------------
-
-from smolagents import CodeAgent
-
 class TipAgent(CodeAgent):
     def __init__(self):
         super().__init__(
             model=LLM,
             tools=[
-                BrewInfoTool(),
-                ManTool(),
-                InfoTool(),
-                TldrTool(),
-                HelpTool(),
-                ProbeTool(),
-                ScriptTool(),
+                BrewInfoTool(), ManTool(), InfoTool(), TldrTool(),
+                HelpTool(), ProbeTool(), ScriptTool()
             ]
         )
 
@@ -171,31 +152,44 @@ class TipAgent(CodeAgent):
             ```py
             final_answer("Your tip here")
             ```<end_code>
-            """)
+        """)
 
     def run_tip(self, tool: str) -> str:
         return self.run(self.plan(tool), additional_args={"tool": tool})
 
-
 # ------------- Orchestrator -------------
 
 def generate_tip(tool: str) -> str:
-    agent = TipAgent()
-    return agent.run_tip(tool)
-
-# ------------- CLI -------------
+    return TipAgent().run_tip(tool)
 
 def main(tool: str, cache_path: str, tip_path: str):
+    tool = tool.strip()
+    if not tool:
+        print("Error: Tool name is missing or blank.")
+        sys.exit(1)
+
     tip = generate_tip(tool)
     cache_file = Path(cache_path)
-    try: cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
-    except json.JSONDecodeError: cache = {}
-    cache[tool] = tip
+    try:
+        cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
+    except json.JSONDecodeError:
+        cache = {}
+
+    now = int(Path().stat().st_mtime)  # fallback if date fails
+    try:
+        now = int(subprocess.check_output(["date", "+%s"], text=True).strip())
+    except Exception:
+        pass
+
+    cache[tool] = {"tip": tip, "last_shown": now}
     cache_file.write_text(json.dumps(cache, indent=2))
-    Path(tip_path).write_text(tip + "\n"); print(tip)
+    Path(tip_path).write_text(tip + "\n")
+    print(tip)
+
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: generate_tip.py <tool> <cache.json> <tipfile>"); sys.exit(1)
+        print("Usage: generate_tip.py <tool> <cache.json> <tipfile>")
+        sys.exit(1)
     main(*sys.argv[1:])

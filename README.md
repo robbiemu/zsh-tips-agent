@@ -1,5 +1,5 @@
 # 💡 zsh-tips-agent
-<small>_v.0.1.0_</small>
+<small>_v.0.1.1_</small>
 
 A background-aware Zsh enhancement that shows helpful, low-use custom tooltips each time you open a terminal — powered by your actual usage history and LLM-generated suggestions.
 
