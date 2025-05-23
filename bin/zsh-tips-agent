@@ -1,38 +1,109 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---- Paths & Defaults ----
-# Default installation prefix
-DEFAULT_PREFIX="/usr/local"
-PREFIX="$DEFAULT_PREFIX"
+# ---- Functions ----
 
-# Source directory (project root - parent of the directory containing this script)
-SCRIPT_PATH="${BASH_SOURCE[0]}"
-# Resolve symlinks manually for macOS compatibility
-while [[ -L "$SCRIPT_PATH" ]]; do
-  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
-done
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+usage() {
+  cat <<EOF >&2
+Usage: zsh-tips-agent [--prefix <path>] <command> [options]
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --prefix)
-      shift
-      PREFIX="$1"
-      shift
-      ;;
-    *)
-      break
-      ;;
-  esac
-done
+Commands:
+  install                 Install zsh-tips-agent (default prefix: /usr/local)
+  init [--apply|--print]  Add or display the snippet for ~/.zshrc
+  help                    Show this message
 
-# Set derived paths after parsing arguments
-BIN_DIR="$PREFIX/bin"
-LIB_DIR="$PREFIX/lib/zsh-tips-agent"
+Options:
+  --prefix <path>         Installation prefix (default: /usr/local)
 
-SNIPPET=$(cat <<EOF
+EOF
+  exit 1
+}
+
+cmd_install() {
+  echo "Installing zsh-tips-agent..."
+  echo "  Source directory: $SCRIPT_DIR"
+  echo "  Target bin directory: $BIN_DIR"
+  echo "  Target lib directory: $LIB_DIR"
+
+  mkdir -p "$BIN_DIR"
+  mkdir -p "$LIB_DIR"
+
+  # Copy the main executable to bin
+  install -m755 "$SCRIPT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
+  echo "  ✓ Installed zsh-tips-agent to $BIN_DIR"
+
+  # Copy everything else to lib directory
+  cp -r "$SCRIPT_DIR/bin" "$LIB_DIR/"
+  cp -r "$SCRIPT_DIR/agent" "$LIB_DIR/"
+  [[ -f "$SCRIPT_DIR/pyproject.toml" ]] && cp "$SCRIPT_DIR/pyproject.toml" "$LIB_DIR/"
+  echo "  ✓ Installed library files to $LIB_DIR"
+
+  # Set up Python virtual environment
+  if command -v uv >/dev/null 2>&1; then
+    echo "  Creating Python virtual environment with uv..."
+    uv venv "$LIB_DIR/.venv" || {
+      echo "  ❌ Error: uv failed to create a virtual environment."
+      echo "  Please update uv: pip install --upgrade uv"
+      echo "  See https://github.com/astral-sh/uv for more info."
+      exit 1
+    }
+    VENV_PY="$LIB_DIR/.venv/bin/python"
+    VENV_PIP="$LIB_DIR/.venv/bin/uv pip"
+  elif command -v python3 >/dev/null 2>&1; then
+    echo "  Creating Python virtual environment with python3..."
+    python3 -m venv "$LIB_DIR/.venv" || {
+      echo "  ❌ Error: python3 failed to create a virtual environment."
+      echo "  This is usually due to a missing ensurepip or a broken Python install."
+      echo "  On macOS, try: brew install python"
+      echo "  Or install uv: pip install uv"
+      echo "  See https://github.com/astral-sh/uv for more info."
+      exit 1
+    }
+    VENV_PY="$LIB_DIR/.venv/bin/python"
+    VENV_PIP="$LIB_DIR/.venv/bin/pip"
+  else
+    echo "  ❌ Error: Neither uv nor python3 was found."
+    echo "  Please install Python 3.8+ or uv: pip install uv"
+    exit 1
+  fi
+
+  # Install dependencies
+  if [[ -f "$LIB_DIR/pyproject.toml" ]]; then
+    if command -v uv >/dev/null 2>&1; then
+      uv pip install -e "$LIB_DIR" >/dev/null 2>&1 || {
+        echo "  ⚠️  Warning: Failed to install Python dependencies with uv."
+        echo "     Try manually: uv pip install -e $LIB_DIR"
+      }
+    else
+      "$LIB_DIR/.venv/bin/pip" install -e "$LIB_DIR" >/dev/null 2>&1 || {
+        echo "  ⚠️  Warning: Failed to install Python dependencies."
+        echo "     Try manually: $LIB_DIR/.venv/bin/pip install -e $LIB_DIR"
+      }
+    fi
+  else
+    echo "  ⚠️  No pyproject.toml found, skipping Python setup"
+  fi
+
+  if [[ "$PREFIX" != "$DEFAULT_PREFIX" ]]; then
+    INIT_CMD="zsh-tips-agent init --prefix \"$PREFIX\" --print"
+    APPLY_CMD="zsh-tips-agent init --prefix \"$PREFIX\" --apply"
+  else
+    INIT_CMD="zsh-tips-agent init --print"
+    APPLY_CMD="zsh-tips-agent init --apply"
+  fi
+
+  echo "✅ Installation complete!"
+  echo
+  echo "To enable zsh-tips-agent, add this to your ~/.zshrc:"
+  echo
+  echo "  eval \"\$($INIT_CMD)\""
+  echo
+  echo "Or run: $APPLY_CMD"
+}
+
+
+cmd_init() {
+  SNIPPET=$(cat <<EOF
 # ---- zsh-tips-agent ----
 TIPS_AGENT_DIR="\${TIPS_AGENT_DIR:-$LIB_DIR}"
 DATA_DIR="\$HOME/.local/share/zsh-tips-agent/data"
@@ -55,72 +126,6 @@ fi
 EOF
 )
 
-usage() {
-  cat <<EOF >&2
-Usage: zsh-tips-agent [--prefix <path>] <command> [options]
-
-Commands:
-  install                 Install zsh-tips-agent (default prefix: $DEFAULT_PREFIX)
-  init [--apply|--print]  Add or display the snippet for ~/.zshrc
-  help                    Show this message
-
-Options:
-  --prefix <path>         Installation prefix (default: $DEFAULT_PREFIX)
-
-Installation paths (with --prefix=$PREFIX):
-  Scripts:     $BIN_DIR
-  Library:     $LIB_DIR
-  User data:   ~/.local/share/zsh-tips-agent
-EOF
-  exit 1
-}
-
-cmd_install() {
-  echo "Installing zsh-tips-agent..."
-  echo "  Source directory: $SCRIPT_DIR"
-  echo "  Target bin directory: $BIN_DIR"
-  echo "  Target lib directory: $LIB_DIR"
-  
-  # Create directories
-  mkdir -p "$BIN_DIR"
-  mkdir -p "$LIB_DIR"
-  
-  # Copy the main executable to bin
-  install -m755 "$SCRIPT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
-  echo "  ✓ Installed zsh-tips-agent to $BIN_DIR"
-  
-  # Copy everything else to lib directory
-  cp -r "$SCRIPT_DIR/bin" "$LIB_DIR/"
-  cp -r "$SCRIPT_DIR/agent" "$LIB_DIR/"
-  [[ -f "$SCRIPT_DIR/pyproject.toml" ]] && cp "$SCRIPT_DIR/pyproject.toml" "$LIB_DIR/"
-  echo "  ✓ Installed library files to $LIB_DIR"
-  
-  # Set up Python virtual environment
-  if command -v python3 >/dev/null 2>&1; then
-    echo "  Setting up Python virtual environment..."
-    python3 -m venv "$LIB_DIR/.venv"
-    if [[ -f "$LIB_DIR/pyproject.toml" ]]; then
-      "$LIB_DIR/.venv/bin/pip" install -e "$LIB_DIR" >/dev/null 2>&1 || {
-        echo "  ⚠️  Warning: Failed to install Python dependencies. Install manually with:"
-        echo "     $LIB_DIR/.venv/bin/pip install -e $LIB_DIR"
-      }
-    else
-      echo "  ⚠️  No pyproject.toml found, skipping Python setup"
-    fi
-  else
-    echo "  ⚠️  Python3 not found, skipping virtual environment setup"
-  fi
-  
-  echo "✅ Installation complete!"
-  echo
-  echo "To enable zsh-tips-agent, add this to your ~/.zshrc:"
-  echo
-  echo "  eval \"\$(zsh-tips-agent init --print)\""
-  echo
-  echo "Or run: zsh-tips-agent init --apply"
-}
-
-cmd_init() {
   case "${1:-}" in
     --print)
       echo "$SNIPPET"
@@ -142,7 +147,34 @@ cmd_init() {
   esac
 }
 
-# Dispatch commands
+# ---- End of function definitions ----
+
+# ---- Set Paths & Parse Global Arguments ----
+
+# Default installation prefix
+DEFAULT_PREFIX="/usr/local"
+PREFIX="$DEFAULT_PREFIX"
+
+# Source directory (project root - parent of the directory containing this script)
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+
+# Parse --prefix anywhere in the command line
+for ((i=1; i<=$#; i++)); do
+  if [[ "${!i}" == "--prefix" ]]; then
+    next=$((i+1))
+    eval "PREFIX=\${$next}"
+  fi
+done
+
+# Set derived paths after parsing arguments
+BIN_DIR="$PREFIX/bin"
+LIB_DIR="$PREFIX/lib/zsh-tips-agent"
+
+# ---- Dispatch Commands ----
 case "${1:-help}" in
   install) shift; cmd_install "$@" ;;
   init)    shift; cmd_init "$@" ;;
