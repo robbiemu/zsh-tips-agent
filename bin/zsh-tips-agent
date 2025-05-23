@@ -2,75 +2,153 @@
 set -euo pipefail
 
 # ---- Paths & Defaults ----
-PREFIX=${PREFIX:-/usr/local}
+# Default installation prefix
+DEFAULT_PREFIX="/usr/local"
+PREFIX="$DEFAULT_PREFIX"
+
+# Source directory (project root - parent of the directory containing this script)
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+# Resolve symlinks manually for macOS compatibility
+while [[ -L "$SCRIPT_PATH" ]]; do
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)
+      shift
+      PREFIX="$1"
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# Set derived paths after parsing arguments
 BIN_DIR="$PREFIX/bin"
-TIPS_AGENT_DIR="${GH:-$HOME/Github}/zsh-tips-agent"
-UPDATE_SCRIPT="$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
-SNIPPET=''
+LIB_DIR="$PREFIX/lib/zsh-tips-agent"
+
+SNIPPET=$(cat <<EOF
 # ---- zsh-tips-agent ----
-TIPS_AGENT_DIR="${GH:-$HOME/Github}/zsh-tips-agent"
-TIP_CACHE_FILE="$TIPS_AGENT_DIR/data/current_tip.txt"
-UPDATE_SCRIPT="$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
+TIPS_AGENT_DIR="\${TIPS_AGENT_DIR:-$LIB_DIR}"
+DATA_DIR="\$HOME/.local/share/zsh-tips-agent/data"
+TIP_CACHE_FILE="\$DATA_DIR/current_tip.txt"
+UPDATE_SCRIPT="\$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
 TIP_AGE_HOURS=2
 
 tip_is_fresh() {
-  [[ ! -f "$TIP_CACHE_FILE" ]] && return 1
-  now=$(date +%s)
-  filetime=$(stat -f %m "$TIP_CACHE_FILE" 2>/dev/null)
+  [[ ! -f "\$TIP_CACHE_FILE" ]] && return 1
+  now=\$(date +%s)
+  filetime=\$(stat -f %m "\$TIP_CACHE_FILE" 2>/dev/null || stat -c %Y "\$TIP_CACHE_FILE" 2>/dev/null)
   (( ((now - filetime)/3600) < TIP_AGE_HOURS ))
 }
 
-[[ -f "$TIP_CACHE_FILE" ]] && cat "$TIP_CACHE_FILE"
-
+[[ -f "\$TIP_CACHE_FILE" ]] && cat "\$TIP_CACHE_FILE"
 if ! tip_is_fresh; then
-  [[ -x "$UPDATE_SCRIPT" ]] && "$UPDATE_SCRIPT" > /dev/null 2>&1 &!
+  [[ -x "\$UPDATE_SCRIPT" ]] && PROJECT_DIR="\$TIPS_AGENT_DIR" "\$UPDATE_SCRIPT" > /dev/null 2>&1 &
 fi
 # ---- /zsh-tips-agent ----
-'SNIPPET'
+EOF
+)
 
 usage() {
   cat <<EOF >&2
-Usage: zsh-tips-agent <command> [options]
+Usage: zsh-tips-agent [--prefix <path>] <command> [options]
 
 Commands:
-  install              Copy scripts to \$BIN_DIR (default /usr/local/bin)
+  install                 Install zsh-tips-agent (default prefix: $DEFAULT_PREFIX)
   init [--apply|--print]  Add or display the snippet for ~/.zshrc
-  help                 Show this message
+  help                    Show this message
+
+Options:
+  --prefix <path>         Installation prefix (default: $DEFAULT_PREFIX)
+
+Installation paths (with --prefix=$PREFIX):
+  Scripts:     $BIN_DIR
+  Library:     $LIB_DIR
+  User data:   ~/.local/share/zsh-tips-agent
 EOF
   exit 1
 }
 
 cmd_install() {
-  echo "Installing zsh-tips-agent to \$BIN_DIR..."
+  echo "Installing zsh-tips-agent..."
+  echo "  Source directory: $SCRIPT_DIR"
+  echo "  Target bin directory: $BIN_DIR"
+  echo "  Target lib directory: $LIB_DIR"
+  
+  # Create directories
   mkdir -p "$BIN_DIR"
-  install -m755 "$TIPS_AGENT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
-  install -m755 "$TIPS_AGENT_DIR/bin/update_tip_cache.sh" "$BIN_DIR/update_tip_cache.sh"
-  echo "Done."
-  echo "Add to your ~/.zshrc:"
+  mkdir -p "$LIB_DIR"
+  
+  # Copy the main executable to bin
+  install -m755 "$SCRIPT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
+  echo "  ✓ Installed zsh-tips-agent to $BIN_DIR"
+  
+  # Copy everything else to lib directory
+  cp -r "$SCRIPT_DIR/bin" "$LIB_DIR/"
+  cp -r "$SCRIPT_DIR/agent" "$LIB_DIR/"
+  [[ -f "$SCRIPT_DIR/pyproject.toml" ]] && cp "$SCRIPT_DIR/pyproject.toml" "$LIB_DIR/"
+  echo "  ✓ Installed library files to $LIB_DIR"
+  
+  # Set up Python virtual environment
+  if command -v python3 >/dev/null 2>&1; then
+    echo "  Setting up Python virtual environment..."
+    python3 -m venv "$LIB_DIR/.venv"
+    if [[ -f "$LIB_DIR/pyproject.toml" ]]; then
+      "$LIB_DIR/.venv/bin/pip" install -e "$LIB_DIR" >/dev/null 2>&1 || {
+        echo "  ⚠️  Warning: Failed to install Python dependencies. Install manually with:"
+        echo "     $LIB_DIR/.venv/bin/pip install -e $LIB_DIR"
+      }
+    else
+      echo "  ⚠️  No pyproject.toml found, skipping Python setup"
+    fi
+  else
+    echo "  ⚠️  Python3 not found, skipping virtual environment setup"
+  fi
+  
+  echo "✅ Installation complete!"
   echo
-  echo "  eval \"\\$(zsh-tips-agent init --print)\""
+  echo "To enable zsh-tips-agent, add this to your ~/.zshrc:"
+  echo
+  echo "  eval \"\$(zsh-tips-agent init --print)\""
+  echo
+  echo "Or run: zsh-tips-agent init --apply"
 }
 
 cmd_init() {
-  if [[ "${1:-}" == "--print" ]]; then
-    # print snippet
-    echo "$SNIPPET"
-    exit 0
-  fi
-  # apply snippet
-  ZSHRC="$HOME/.zshrc"
-  if ! grep -q 'zsh-tips-agent ----' "$ZSHRC"; then
-    printf "\n%s\n" "$SNIPPET" >> "$ZSHRC"
-    echo "✅ Added zsh‑tips‑agent snippet to $ZSHRC"
-  else
-    echo "ℹ️  zsh‑tips‑agent snippet already present in $ZSHRC"
-  fi
+  case "${1:-}" in
+    --print)
+      echo "$SNIPPET"
+      exit 0
+      ;;
+    --apply|"")
+      ZSHRC="$HOME/.zshrc"
+      if ! grep -q 'zsh-tips-agent ----' "$ZSHRC" 2>/dev/null; then
+        printf "\n%s\n" "$SNIPPET" >> "$ZSHRC"
+        echo "✅ Added zsh-tips-agent snippet to $ZSHRC"
+      else
+        echo "ℹ️  zsh-tips-agent snippet already present in $ZSHRC"
+      fi
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      ;;
+  esac
 }
 
-# dispatch
+# Dispatch commands
 case "${1:-help}" in
-  install) cmd_install ;; 
-  init)    shift; cmd_init "$@" ;; 
-  help|--help|-h) usage ;; 
-  *) usage ;; 
+  install) shift; cmd_install "$@" ;;
+  init)    shift; cmd_init "$@" ;;
+  help|--help|-h) usage ;;
+  *) 
+    echo "Unknown command: $1" >&2
+    usage 
+    ;;
 esac

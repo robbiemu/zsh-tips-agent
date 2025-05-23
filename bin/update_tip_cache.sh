@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # ---- Configurable paths ----
-PROJECT_DIR="${PROJECT_DIR:-$GH/zsh-tips-agent}"
+# Default to installation location, but allow override
+PROJECT_DIR="${PROJECT_DIR:-/usr/local/lib/zsh-tips-agent}"
 HISTORY_FILE="$HOME/.zsh_history"
-CACHE_DIR="$PROJECT_DIR/data"
+CACHE_DIR="$HOME/.local/share/zsh-tips-agent/data"
 TIP_FILE="$CACHE_DIR/current_tip.txt"
 TIP_CACHE="$CACHE_DIR/tip_cache.json"
 AGENT="$PROJECT_DIR/agent/generate_tip.py"
@@ -35,8 +36,7 @@ for dir in ~/.local/bin /usr/local/bin /opt/homebrew/bin; do
     fi
   done
  done
-tools=( $(printf "%s
-" "${tools[@]}" | sort -u) )
+tools=( $(printf "%s\n" "${tools[@]}" | sort -u) )
 
 if [[ ${#tools[@]} -eq 0 ]]; then
   echo "No tool candidates found for tips." >"$TIP_FILE"
@@ -47,8 +47,7 @@ fi
 tmp_usage=$(mktemp)
 for tool in "${tools[@]}"; do
   count=$(grep -c -w "$tool" "$HISTORY_FILE" 2>/dev/null || echo 0)
-  printf '%s %s
-' "$count" "$tool" >>"$tmp_usage"
+  printf '%s %s\n' "$count" "$tool" >>"$tmp_usage"
   (( VERBOSE )) && echo "Usage count: $count  Tool: $tool" >&2
 done
 
@@ -72,7 +71,7 @@ for usage in "${sorted_counts[@]}"; do
   tools_in_tier_file="$usage_groups_dir/$usage"
   [[ -f "$tools_in_tier_file" ]] || continue
 
-  # Read this tier’s tools into an array
+  # Read this tier's tools into an array
   tools_in_tier=()
   while IFS= read -r tool; do
     tools_in_tier+=( "$tool" )
