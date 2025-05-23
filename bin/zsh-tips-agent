@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SNIPPET='
+# ---- Paths & Defaults ----
+PREFIX=${PREFIX:-/usr/local}
+BIN_DIR="$PREFIX/bin"
+TIPS_AGENT_DIR="${GH:-$HOME/Github}/zsh-tips-agent"
+UPDATE_SCRIPT="$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
+SNIPPET=''
 # ---- zsh-tips-agent ----
 TIPS_AGENT_DIR="${GH:-$HOME/Github}/zsh-tips-agent"
 TIP_CACHE_FILE="$TIPS_AGENT_DIR/data/current_tip.txt"
@@ -21,20 +26,38 @@ if ! tip_is_fresh; then
   [[ -x "$UPDATE_SCRIPT" ]] && "$UPDATE_SCRIPT" > /dev/null 2>&1 &!
 fi
 # ---- /zsh-tips-agent ----
-
-'
+'SNIPPET'
 
 usage() {
-  echo "Usage: zsh-tips-agent init [--apply|--print]" >&2
+  cat <<EOF >&2
+Usage: zsh-tips-agent <command> [options]
+
+Commands:
+  install              Copy scripts to \$BIN_DIR (default /usr/local/bin)
+  init [--apply|--print]  Add or display the snippet for ~/.zshrc
+  help                 Show this message
+EOF
   exit 1
 }
 
-init() {
+cmd_install() {
+  echo "Installing zsh-tips-agent to \$BIN_DIR..."
+  mkdir -p "$BIN_DIR"
+  install -m755 "$TIPS_AGENT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
+  install -m755 "$TIPS_AGENT_DIR/bin/update_tip_cache.sh" "$BIN_DIR/update_tip_cache.sh"
+  echo "Done."
+  echo "Add to your ~/.zshrc:"
+  echo
+  echo "  eval \"\\$(zsh-tips-agent init --print)\""
+}
+
+cmd_init() {
   if [[ "${1:-}" == "--print" ]]; then
+    # print snippet
     echo "$SNIPPET"
     exit 0
   fi
-
+  # apply snippet
   ZSHRC="$HOME/.zshrc"
   if ! grep -q 'zsh-tips-agent ----' "$ZSHRC"; then
     printf "\n%s\n" "$SNIPPET" >> "$ZSHRC"
@@ -44,8 +67,10 @@ init() {
   fi
 }
 
-[[ $# -lt 1 ]] && usage
-case "$1" in
-  init) shift; init "$@";;
-  *) usage;;
+# dispatch
+case "${1:-help}" in
+  install) cmd_install ;; 
+  init)    shift; cmd_init "$@" ;; 
+  help|--help|-h) usage ;; 
+  *) usage ;; 
 esac

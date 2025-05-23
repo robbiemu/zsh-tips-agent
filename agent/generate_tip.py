@@ -9,7 +9,11 @@ from smolagents import CodeAgent, LiteLLMModel, Tool
 # ---------------- Config ----------------
 
 def load_model_cfg() -> tuple[str, dict, int]:
-    cfg = Path(__file__).parent / "config.json"
+    user_cfg = Path.home() / ".local" / "share" / "zsh-tips-agent" / "config.json"
+    if user_cfg.is_file():
+        cfg = user_cfg
+    else:
+        cfg = Path(__file__).parent / "config.json"
     model_id = os.getenv("ZSH_TIP_MODEL", "gemma3")
     params: dict = {}
     tokens = 4096

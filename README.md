@@ -1,70 +1,49 @@
 # 💡 zsh-tips-agent
-<small>_v.0.1.1_</small>
 
-A background-aware Zsh enhancement that shows helpful, low-use custom tooltips each time you open a terminal — powered by your actual usage history and LLM-generated suggestions.
+A Zsh tool that provides useful command-line tips based on your actual usage history, leveraging local language models via ollama without slowing down your terminal.
 
 ## 🔧 Features
 
-- Highlights underused CLI tools from `/usr/local/bin` and `brew` packages
-- Reads usage frequency from your `~/.zsh_history`
-- Generates tip text using local LLMs via [SmolAgents](https://github.com/smol-ai/smol-agent)
-- Runs tip generation in the background to avoid blocking terminal startup
-- Tips are cached and rotated daily (or however often you prefer)
+- Suggests underused CLI tools from directories such as `/usr/local/bin` or `brew` packages
+- Generates personalized tips based on your command history (`~/.zsh_history`)
+- Uses local language models (e.g., via `ollama`) to intelligently generate tips
+- Updates tip cache in the background to ensure quick terminal startup
+- Automatically refreshes tips periodically
 
-## 🗂️ Project Layout
-
-```
-
-zsh-tips-agent/
-├── bin/
-│   └── update\_tip\_cache.sh      # Scans tools, usage, triggers tip generation
-├── agent/
-│   └── generate\_tip.py          # SmolAgent that generates a tip with Ollama
-├── data/
-│   └── tip\_cache.json           # Cached tips by tool
-├── .zshrc\_snippet               # Add to your \~/.zshrc
-
-````
-
-## 🚀 Getting Started
+## 🚀 Quickstart
 
 ```bash
 git clone https://github.com/YOURUSER/zsh-tips-agent.git $GH/zsh-tips-agent
 cd $GH/zsh-tips-agent
 uv pip install .
+zsh-tips-agent install
 zsh-tips-agent init --apply
 source ~/.zshrc
-````
-
-*Optional:* Use the one-liner version instead:
-
-```bash
-eval "$(zsh-tips-agent init)"
 ```
 
-### ✅ Requirements
+Alternatively, directly add this to your `~/.zshrc`:
 
-* [`ollama`](https://ollama.com/) installed and running locally
-* Local models available via `ollama ls` (e.g. `llama3`, `phi3`)
-* `smolagents` Python package (installed automatically by `uv pip install .`)
-* Custom tools installed in `/usr/local/bin` or via `brew`
+```bash
+eval "$(zsh-tips-agent init --print)"
+```
 
-The system will show a cached tip on each terminal startup and update the tip quietly in the background.
+## ✅ Prerequisites
+
+- [`ollama`](https://ollama.com/) installed and configured locally
+- At least one local language model available (`ollama ls`, e.g., `llama3`, `phi3`)
+- Python dependencies installed via `uv pip install .`
+- CLI tools available on your system (typically `/usr/local/bin`, `brew`)
 
 ## 🧠 Tip Generation
 
-Tips are generated in the background using a local LLM. You can customize this process via `agent/generate_tip.py`.
+Tips are generated using local language models. They are cached and updated periodically in the background, ensuring a responsive terminal.
 
----
+## ⚙️ Customization
 
-> Tip generation doesn't block terminal load: the previous tip is cached and displayed immediately.
-
-## ⚙️ Configuration
-
-You can customize which model is used for tip generation (and how it's configured) by editing the local `config.json` file:
+Customize the model and parameters by editing:
 
 ```bash
-$GH/zsh-tips-agent/agent/config.json
+~/.local/share/zsh-tips-agent/config.json
 ```
 
 Example:
@@ -79,15 +58,12 @@ Example:
 }
 ```
 
-* `model_id` should match a model available via `ollama ls`
-* `model_params` accepts any valid generation settings supported by your model
-
-You can also override these temporarily using environment variables:
+If absent, defaults from `agent/config.json` are used. Environment variables can temporarily override these settings:
 
 ```bash
 ZSH_TIP_MODEL=phi3 python agent/generate_tip.py ...
 ```
 
----
+## 📜 License
 
-> ⚠️ The config is optional — if not present, the system defaults to `llama3` with no parameters.
+[LGPLv3](LICENSE)
