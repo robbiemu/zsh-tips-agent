@@ -6,9 +6,17 @@ SNIPPET='
 TIPS_AGENT_DIR="${GH:-$HOME/Github}/zsh-tips-agent"
 TIP_CACHE_FILE="$TIPS_AGENT_DIR/data/current_tip.txt"
 UPDATE_SCRIPT="$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
-[[ -f "$TIP_CACHE_FILE" ]] && cat "$TIP_CACHE_FILE"
-[[ -x "$UPDATE_SCRIPT" ]] && "$UPDATE_SCRIPT" &!
+
+if [[ -f "$TIP_CACHE_FILE" ]]; then
+  cat "$TIP_CACHE_FILE"
+  [[ -x "$UPDATE_SCRIPT" ]] && "$UPDATE_SCRIPT" &!
+else
+  MSG="🤖 Generating your first tip... (this may take a moment!)"
+  echo "$MSG"
+  [[ -x "$UPDATE_SCRIPT" ]] && "$UPDATE_SCRIPT" &!
+fi
 # ---- /zsh-tips-agent ----
+
 '
 
 usage() {

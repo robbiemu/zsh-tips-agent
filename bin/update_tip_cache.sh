@@ -13,15 +13,13 @@ mkdir -p "$CACHE_DIR"
 
 # ---- Gather tool candidates ----
 tools=()
-while IFS= read -r tool; do
-  [[ -n "$tool" ]] && tools+=("$tool")
-done < <(
-  {
-    ls ~/.local/bin 2>/dev/null
-    ls /usr/local/bin 2>/dev/null
-    brew list --formula 2>/dev/null
-  } | sort -u | grep -v '^$'
-)
+for dir in ~/.local/bin /usr/local/bin /opt/homebrew/bin; do
+  [[ -d "$dir" ]] || continue
+  while IFS= read -r tool; do
+  [[ -n "$tool" && ! -d "$dir/$tool" && ( -f "$dir/$tool" || -L "$dir/$tool" ) && -x "$dir/$tool" ]] && tools+=("$tool")
+  done < <(ls "$dir" 2>/dev/null)
+done
+tools=($(printf "%s\n" "${tools[@]}" | sort -u))
 
 if [[ ${#tools[@]} -eq 0 ]]; then
   echo "No tool candidates found for tips." > "$TIP_FILE"
@@ -54,7 +52,7 @@ else
   if [[ ! -f "$TIP_FILE" ]]; then
     echo "🤖 Generating tip for '$least_used'..." > "$TIP_FILE"
   fi
-  nohup python3 "$AGENT" "$least_used" "$TIP_CACHE" "$TIP_FILE" >/dev/null 2>&1 &
+  nohup "$PROJECT_DIR/.venv/bin/python" "$AGENT" "$least_used" "$TIP_CACHE" "$TIP_FILE" >/dev/null 2>&1 &
   exit 0
 fi
 
