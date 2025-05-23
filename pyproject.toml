@@ -1,0 +1,11 @@
+[project]
+name = "zsh-tips-agent"
+version = "0.1.0"
+description = "Agent that generates tips for underused CLI tools"
+dependencies = [
+  "smolagents",
+  "ollama"
+]
+
+[tool.setuptools]
+packages = ["agent"]

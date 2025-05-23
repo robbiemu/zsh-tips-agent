@@ -1,3 +1,6 @@
+build/
+data/
+
 # macOS
 .DS_Store
 
@@ -10,6 +13,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
+.venv
 
 # Bash / shell artifacts
 *.swp
@@ -21,3 +25,4 @@ __pycache__/
 
 # Other
 .env
+config.json

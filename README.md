@@ -1,4 +1,5 @@
 # 💡 zsh-tips-agent
+<small>_v.0.1.0_</small>
 
 A background-aware Zsh enhancement that shows helpful, low-use custom tooltips each time you open a terminal — powered by your actual usage history and LLM-generated suggestions.
 
@@ -29,13 +30,26 @@ zsh-tips-agent/
 
 ```bash
 git clone https://github.com/YOURUSER/zsh-tips-agent.git $GH/zsh-tips-agent
-echo 'source $GH/zsh-tips-agent/.zshrc_snippet' >> ~/.zshrc
+cd $GH/zsh-tips-agent
+uv pip install .
+zsh-tips-agent init --apply
+source ~/.zshrc
 ````
 
-Make sure:
+*Optional:* Use the one-liner version instead:
 
-* You have `smolagent`, `ollama`, and your desired models installed locally.
-* Your tools are discoverable in `/usr/local/bin` or via `brew`.
+```bash
+eval "$(zsh-tips-agent init)"
+```
+
+### ✅ Requirements
+
+* [`ollama`](https://ollama.com/) installed and running locally
+* Local models available via `ollama ls` (e.g. `llama3`, `phi3`)
+* `smolagents` Python package (installed automatically by `uv pip install .`)
+* Custom tools installed in `/usr/local/bin` or via `brew`
+
+The system will show a cached tip on each terminal startup and update the tip quietly in the background.
 
 ## 🧠 Tip Generation
 
@@ -44,3 +58,36 @@ Tips are generated in the background using a local LLM. You can customize this p
 ---
 
 > Tip generation doesn't block terminal load: the previous tip is cached and displayed immediately.
+
+## ⚙️ Configuration
+
+You can customize which model is used for tip generation (and how it's configured) by editing the local `config.json` file:
+
+```bash
+$GH/zsh-tips-agent/agent/config.json
+```
+
+Example:
+
+```json
+{
+  "model_id": "llama3",
+  "model_params": {
+    "temperature": 0.7,
+    "top_p": 0.9
+  }
+}
+```
+
+* `model_id` should match a model available via `ollama ls`
+* `model_params` accepts any valid generation settings supported by your model
+
+You can also override these temporarily using environment variables:
+
+```bash
+ZSH_TIP_MODEL=phi3 python agent/generate_tip.py ...
+```
+
+---
+
+> ⚠️ The config is optional — if not present, the system defaults to `llama3` with no parameters.
