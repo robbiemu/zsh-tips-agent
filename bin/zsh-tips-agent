@@ -22,17 +22,11 @@ EOF
 cmd_install() {
   echo "Installing zsh-tips-agent..."
   echo "  Source directory: $SCRIPT_DIR"
-  echo "  Target bin directory: $BIN_DIR"
   echo "  Target lib directory: $LIB_DIR"
 
-  mkdir -p "$BIN_DIR"
   mkdir -p "$LIB_DIR"
 
-  # Copy the main executable to bin
-  install -m755 "$SCRIPT_DIR/bin/zsh-tips-agent" "$BIN_DIR/zsh-tips-agent"
-  echo "  ✓ Installed zsh-tips-agent to $BIN_DIR"
-
-  # Copy everything else to lib directory
+  # Copy everything to lib directory
   cp -r "$SCRIPT_DIR/bin" "$LIB_DIR/"
   cp -r "$SCRIPT_DIR/agent" "$LIB_DIR/"
   [[ -f "$SCRIPT_DIR/pyproject.toml" ]] && cp "$SCRIPT_DIR/pyproject.toml" "$LIB_DIR/"
@@ -70,12 +64,12 @@ cmd_install() {
   # Install dependencies
   if [[ -f "$LIB_DIR/pyproject.toml" ]]; then
     if command -v uv >/dev/null 2>&1; then
-      uv pip install -e "$LIB_DIR" >/dev/null 2>&1 || {
+      (cd $LIB_DIR && uv pip install -e .) || {
         echo "  ⚠️  Warning: Failed to install Python dependencies with uv."
         echo "     Try manually: uv pip install -e $LIB_DIR"
       }
     else
-      "$LIB_DIR/.venv/bin/pip" install -e "$LIB_DIR" >/dev/null 2>&1 || {
+      (cd $LIB_DIR && ".venv/bin/pip" install -e .) || {
         echo "  ⚠️  Warning: Failed to install Python dependencies."
         echo "     Try manually: $LIB_DIR/.venv/bin/pip install -e $LIB_DIR"
       }
@@ -162,20 +156,34 @@ while [[ -L "$SCRIPT_PATH" ]]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
-# Parse --prefix anywhere in the command line
-for ((i=1; i<=$#; i++)); do
-  if [[ "${!i}" == "--prefix" ]]; then
-    next=$((i+1))
-    eval "PREFIX=\${$next}"
-  fi
+# Parse --prefix anywhere in the command line AND remove it from args
+# This loop handles global options before command dispatch
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)
+      PREFIX="$2"
+      shift 2 # Consume --prefix and its value
+      ;;
+    --) # End of options
+      shift # Consume --
+      POSITIONAL_ARGS+=("$@") 
+      set -- "${POSITIONAL_ARGS[@]}"
+      break
+      ;;
+    *) # Not a global option, so it must be the command or its args
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
 done
+set -- "${POSITIONAL_ARGS[@]}" # Update $@ with cleaned args
 
 # Set derived paths after parsing arguments
-BIN_DIR="$PREFIX/bin"
 LIB_DIR="$PREFIX/lib/zsh-tips-agent"
 
 # ---- Dispatch Commands ----
-case "${1:-help}" in
+case "${1:-help}" in # Now $1 should correctly be the command
   install) shift; cmd_install "$@" ;;
   init)    shift; cmd_init "$@" ;;
   help|--help|-h) usage ;;

@@ -4,7 +4,7 @@ version = "0.1.2"
 description = "Agent that generates tips for underused CLI tools"
 dependencies = [
   "smolagents",
-  "ollama"
+  "litellm"
 ]
 
 [tool.setuptools]
