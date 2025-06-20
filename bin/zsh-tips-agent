@@ -97,12 +97,13 @@ cmd_install() {
 
 
 cmd_init() {
-  SNIPPET=$(cat <<EOF
+SNIPPET=$(cat <<EOF
 # ---- zsh-tips-agent ----
 TIPS_AGENT_DIR="\${TIPS_AGENT_DIR:-$LIB_DIR}"
 DATA_DIR="\$HOME/.local/share/zsh-tips-agent/data"
 TIP_CACHE_FILE="\$DATA_DIR/current_tip.txt"
 UPDATE_SCRIPT="\$TIPS_AGENT_DIR/bin/update_tip_cache.sh"
+ZSH_TIPS_AGENT_LOG="\$HOME/.local/share/zsh-tips-agent/last-run.log"
 TIP_AGE_HOURS=2
 
 tip_is_fresh() {
@@ -113,12 +114,20 @@ tip_is_fresh() {
 }
 
 [[ -f "\$TIP_CACHE_FILE" ]] && cat "\$TIP_CACHE_FILE"
+
 if ! tip_is_fresh; then
-  [[ -x "\$UPDATE_SCRIPT" ]] && PROJECT_DIR="\$TIPS_AGENT_DIR" "\$UPDATE_SCRIPT" > /dev/null 2>&1 &
+  if [[ -x "\$UPDATE_SCRIPT" ]]; then
+    { 
+      echo "--- Running update_tip_cache.sh at \$(date) ---" >> "\$ZSH_TIPS_AGENT_LOG"
+      PROJECT_DIR="\$TIPS_AGENT_DIR" "\$UPDATE_SCRIPT" >> "\$ZSH_TIPS_AGENT_LOG" 2>&1
+      echo "--- Finished update_tip_cache.sh ---" >> "\$ZSH_TIPS_AGENT_LOG"
+    } & 2>/dev/null
+  fi
 fi
 # ---- /zsh-tips-agent ----
 EOF
 )
+
 
   case "${1:-}" in
     --print)
